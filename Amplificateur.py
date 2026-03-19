@@ -10,7 +10,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 import scipy.optimize as op
-
+from D_func import n_silica, n_germanosilicate, solve_modes
+from puissance import gamma_core
 # Sections efficaces
 cs_s_abs_data = np.genfromtxt("abs_ErALP_1550nm.csv")
 cs_s_ems_data = np.genfromtxt("ems_ErALP_1550nm.csv")
@@ -33,37 +34,38 @@ class Amplificateur(object):
 
         #1) On commence avec les paramètres qui sont constant dans
         #   l'amplificateur simulé
-        self.Ntot = #ToDo        # Densité ioniques de dopant [m^3]
-        self.ac=#ToDo            # Rayon du coeur
-        self.ag=#ToDo         # Rayon de la gaine
-        self.x_germ=#ToDo        # Concentration de germanium coeur
-        self.lambda_p=#ToDo     # Longeur d'onde de pompage
-        self.w22=#ToDo         # Transfert par pair d'ion
-        self.tau2=#ToDo        # Temps de vie du niveau 2
-        self.tau3=#ToDo           # Temps de vie du niveau 3
-        self.tau4=#ToDo           # Temps de vie du niveau 4
-        self.sigma_p=#ToDo    # Section efficace d'absorption à la
+        self.Ntot = 1e26 #ToDo        # Densité ioniques de dopant [m^3]
+        self.ac= 4e-6#ToDo            # Rayon du coeur
+        self.ag= 62.5e-6#ToDo         # Rayon de la gaine
+        self.x_germ= 0.045#ToDo        # Concentration de germanium coeur
+        self.lambda_p= 978e-9#ToDo     # Longeur d'onde de pompage
+        self.w22= 1.7e-23#ToDo         # Transfert par pair d'ion
+        self.tau2= 10.8e-3#ToDo        # Temps de vie du niveau 2
+        self.tau3= 0.005e-3#ToDo           # Temps de vie du niveau 3
+        self.tau4=  0.005e-3#ToDo           # Temps de vie du niveau 4
+        self.sigma_p= 31.2e-26#ToDo    # Section efficace d'absorption à la
                                 #  longueur d'onde de la pompe
-        self.sigma_esa=#ToDo   # Section efficace du ESA
-        self.alpha_p=#ToDo        # Pertes de la fibre à la
+        self.sigma_esa= 6.2e-26#ToDo   # Section efficace du ESA
+        self.alpha_p= 0.01#ToDo        # Pertes de la fibre à la
                                 #  longueur d'onde de pompage
-        self.alpha_s=#ToDo        # Pertes de la fibre à la
+        self.alpha_s= 0.01#ToDo        # Pertes de la fibre à la
                                 #  longueur d'onde du signal
 
         # 2) Pour les paramètres ci-dessous , nous leur attribuons la valeur
         # donnée au constructeur
-        self.L = #ToDo               # longueur de l'amplificateur
-        self.lambda_s = #ToDo # Longueur d'onde du signal.
+        self.L = L #ToDo               # longueur de l'amplificateur
+        self.lambda_s = lambda_s #ToDo # Longueur d'onde du signal.
 
         # 3) Les paramètres qui dépendent des paramètres
         # définis précédemment à l'étape 1) et 2).
-        self.Ac = #ToDo                # Aire coeur
-        self.Ag = #ToDo                # Aire de la gaine
+        self.Ac = np.pi * self.ac**2#ToDo                # Aire coeur
+        self.Ag = np.pi * self.ag**2#ToDo                # Aire de la gaine
         # Calcul du confinement de la pompe selon qu'elle est injectée dans
         # la gaine ou dans le coeur de la fibre
         if pump == "clad":
-            self.gamma_p = #ToDo            # Confinement de la pompe dans la gaine
+            self.gamma_p = self.Ac / self.Ag#ToDo            # Confinement de la pompe dans la gaine
         elif pump == "core":
+            self.gamma_p = self.confinement(self.lambda_p, self.x_germ)
             #ToDo                           # Confinement de la pompe dans le coeur
         # Confinement du signal
         self.gamma_s = self.confinement(self.lambda_s, self.x_germ) #ToDo Confinement du signal dans le coeur.
@@ -80,11 +82,26 @@ class Amplificateur(object):
         self.resa = 0
         self.dz = 0
         self.num_elements = 501
+    
+    
 
     def confinement(self,  lambda_i, x_germ):
         # ToDo: Créer votre propre fonction confinement qui prend les arguments lambda_i et x_germ, et qui utilise la(es)
         # ToDo  propriété(s) de l'objet Amplificateur(ex: self.ac)
-        return
+        lam_um = lambda_i * 1e6
+
+        n2 = float(n_silica(lam_um))
+        n1 = float(n_germanosilicate(lam_um, x_germ))
+
+        V, modes = solve_modes(self.ac, lambda_i, n1, n2, l_max=0)
+
+        for md in modes:
+            if md.l == 0 and md.m == 1:   # mode LP01
+                gamma = gamma_core(md.u, md.w, V, md.l)
+                return float(gamma)
+
+        raise RuntimeError("Mode LP01 introuvable")
+        
 
     def sol(self, Pp_launch, Ps_launch, num_elements):
         """Cette fonction intègre les équations de puissance élément par élément dans
@@ -178,24 +195,27 @@ class Amplificateur(object):
 
     def _Resa(self):
         # ToDo
+        self.resa = self.sigma_esa * self.gamma_p * self.lambda_p / \
+                (self.h * self.c * self.Ac) * self.N[2] * self.Pp
         return
     def _Rs(self):
-        # ToDo
+        self.rs = self.gamma_s * self.lambda_s / \
+                (self.h * self.c * self.Ac) * \
+                (self.sigma_ems * self.N[1] - self.sigma_abs * self.N[0]) * self.Ps
         return
-
     # Équations des niveaux
 
     def _dN4(self):
         return -self.N[3]/self.tau4 + self.resa
 
     def _dN3(self):
-        return #ToDo
+        return -self.N[2]/self.tau3 + self.N[3]/self.tau4 + self.rp - self.resa + self.w22*self.N[1]**2
 
     def _dN2(self):
-        return #ToDo
+        return -self.N[1]/self.tau2 + self.N[2]/self.tau3 - self.rs - 2*self.w22*self.N[1]**2
 
     def _zero(self):
-        return self.Ntot - #ToDo
+        return self.Ntot - (self.N[0] + self.N[1] + self.N[2] + self.N[3])
 
     # Intégration de la puissance de pompe et du signal
     def _Pp(self):
@@ -203,7 +223,8 @@ class Amplificateur(object):
                                   self.alpha_p)*self.dz)
 
     def _Ps(self):
-        return #ToDo
+        return self.Ps * np.exp((self.gamma_s*(self.sigma_ems*self.N[1] - self.sigma_abs*self.N[0]) -
+                             self.alpha_s)*self.dz)
 
 if __name__ == '__main__':
     # C'est ici que vous pouvez répondre aux questions. L'appel ci-bas est un exemple qui devrait fonctionner une fois
@@ -213,3 +234,4 @@ if __name__ == '__main__':
     z_sol, Pp_sol, Ps_sol, N_sol = ampli.sol(30,1e-6,301)
     plt.plot(z_sol, Ps_sol) # Ici on met en graphique l'évolution du signal dans l'amplificateur.
 
+    plt.show()
