@@ -235,3 +235,83 @@ if __name__ == '__main__':
     plt.plot(z_sol, Ps_sol) # Ici on met en graphique l'évolution du signal dans l'amplificateur.
 
     plt.show()
+
+    
+    lambda_s = np.linspace(1450e-9, 1600e-9, 500)   
+    lambda_s_nm = lambda_s * 1e9                    
+
+    
+    pump_powers = [0, 2, 4, 8, 16, 32, 64, 128]     
+
+    plt.figure(figsize=(9, 6))
+
+    sigma_abs_vals = cs_s_abs(lambda_s)
+    sigma_ems_vals = cs_s_ems(lambda_s)
+
+    for Pp in pump_powers:
+        
+        ampli = Amplificateur(L=20, lambda_s=1550e-9, pump='clad')
+
+        
+        N = ampli.sol_eq_niv(Pp, 0.0)
+
+        N1 = N[0]
+        N2 = N[1]
+
+
+        
+        gamma = sigma_ems_vals * N2 - sigma_abs_vals * N1  
+
+        plt.plot(lambda_s_nm, gamma, label=f'Pp = {Pp} W')
+
+    plt.axhline(0, color='k', linestyle='--', linewidth=0.8)
+    plt.xlabel("Longueur d'onde du signal λs (nm)")
+    plt.ylabel("Coefficient de gain γ (m$^{-1}$)")
+    plt.title("Coefficient de gain à l'entrée de la fibre (Ps = 0)")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+    
+    L = 5                    # longueur de l'amplificateur [m]
+    lambda_s = 1580e-9       # longueur d'onde du signal [m]
+    pump_powers = [1, 2, 4, 6, 8, 10]   # puissances de pompe [W]
+    signal_powers = np.logspace(-9, 1, 80)   # de 1 nW à 10 W
+    num_elements = 301
+
+    plt.figure(figsize=(8, 5))
+
+    for Pp_in in pump_powers:
+        ampli = Amplificateur(L, lambda_s, pump='clad')
+
+        gains_db = []
+        Ps_out_list = []
+
+        # On balaie de faible à forte puissance.
+        # C'est pratique parce que la solution précédente sert
+        # de bon point de départ pour la suivante.
+        for Ps_in in signal_powers:
+            z_sol, Pp_sol, Ps_sol, N_sol = ampli.sol(Pp_in, Ps_in, num_elements)
+
+            Ps_out = Ps_sol[-1]
+            Ps_out_list.append(Ps_out)
+
+            G_db = 10 * np.log10(Ps_out / Ps_in)
+            gains_db.append(G_db)
+
+        plt.semilogx(signal_powers, gains_db, label=f'Pompe = {Pp_in} W')
+
+        # Optionnel: afficher quelques valeurs utiles
+        print(f"\nPompe = {Pp_in} W")
+        print(f"  Gain petit signal  ≈ {gains_db[0]:.2f} dB")
+        print(f"  Gain à 10 W entrée ≈ {gains_db[-1]:.2f} dB")
+
+    plt.axhline(0, color='k', linestyle='--', linewidth=1)
+    plt.xlabel("Puissance du signal à l'entrée $P_s(0)$ [W]")
+    plt.ylabel("Gain $G = 10\\log_{10}(P_s(L)/P_s(0))$ [dB]")
+    plt.title("Gain d'un amplificateur de 5 m à 1580 nm")
+    plt.grid(True, which='both', alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
