@@ -274,10 +274,10 @@ if __name__ == '__main__':
     plt.show()
 
     
-    L = 5                    # longueur de l'amplificateur [m]
-    lambda_s = 1580e-9       # longueur d'onde du signal [m]
-    pump_powers = [1, 2, 4, 6, 8, 10]   # puissances de pompe [W]
-    signal_powers = np.logspace(-9, 1, 80)   # de 1 nW à 10 W
+    L = 5                   
+    lambda_s = 1580e-9       
+    pump_powers = [1, 2, 4, 6, 8, 10]   
+    signal_powers = np.logspace(-9, 1, 80)  
     num_elements = 301
 
     plt.figure(figsize=(8, 5))
@@ -288,9 +288,7 @@ if __name__ == '__main__':
         gains_db = []
         Ps_out_list = []
 
-        # On balaie de faible à forte puissance.
-        # C'est pratique parce que la solution précédente sert
-        # de bon point de départ pour la suivante.
+        
         for Ps_in in signal_powers:
             z_sol, Pp_sol, Ps_sol, N_sol = ampli.sol(Pp_in, Ps_in, num_elements)
 
@@ -302,7 +300,7 @@ if __name__ == '__main__':
 
         plt.semilogx(signal_powers, gains_db, label=f'Pompe = {Pp_in} W')
 
-        # Optionnel: afficher quelques valeurs utiles
+        
         print(f"\nPompe = {Pp_in} W")
         print(f"  Gain petit signal  ≈ {gains_db[0]:.2f} dB")
         print(f"  Gain à 10 W entrée ≈ {gains_db[-1]:.2f} dB")
@@ -315,3 +313,64 @@ if __name__ == '__main__':
     plt.legend()
     plt.tight_layout()
     plt.show()
+
+L = 15                  
+lambda_s = 1540e-9      
+Ps_in = 1e-6            
+num_elements = 601
+
+cas = [
+    ("Pompage dans la gaine : 10 W", "clad", 10.0),
+    ("Pompage dans le coeur : 0.75 W", "core", 0.75),
+]
+
+# Figures séparées
+plt.figure(figsize=(8, 5))   # Figure 1 : gain
+for etiquette, pump_type, Pp_in in cas:
+    ampli = Amplificateur(L, lambda_s, pump=pump_type)
+    z_sol, Pp_sol, Ps_sol, N_sol = ampli.sol(Pp_in, Ps_in, num_elements)
+
+    G_db = 10 * np.log10(Ps_sol / Ps_in)
+    plt.plot(z_sol, G_db, label=etiquette)
+
+plt.xlabel("Longueur z [m]")
+plt.ylabel("G(z) [dB]")
+plt.title("Gain du signal")
+plt.grid(True, alpha=0.3)
+plt.legend()
+plt.tight_layout()
+
+
+plt.figure(figsize=(8, 5))   # Figure 2 : coefficient de gain
+for etiquette, pump_type, Pp_in in cas:
+    ampli = Amplificateur(L, lambda_s, pump=pump_type)
+    z_sol, Pp_sol, Ps_sol, N_sol = ampli.sol(Pp_in, Ps_in, num_elements)
+
+    # gamma = sigma_ems*N2 - sigma_abs*N1
+    gamma_z = ampli.sigma_ems * N_sol[:, 1] - ampli.sigma_abs * N_sol[:, 0]
+    plt.plot(z_sol, gamma_z, label=etiquette)
+
+plt.xlabel("Longueur z [m]")
+plt.ylabel(r"$\gamma(z)$ [m$^{-1}$]")
+plt.title("Coefficient de gain")
+plt.grid(True, alpha=0.3)
+plt.legend()
+plt.tight_layout()
+
+
+plt.figure(figsize=(8, 5))   # Figure 3 : absorption de la pompe
+for etiquette, pump_type, Pp_in in cas:
+    ampli = Amplificateur(L, lambda_s, pump=pump_type)
+    z_sol, Pp_sol, Ps_sol, N_sol = ampli.sol(Pp_in, Ps_in, num_elements)
+
+    pump_db = 10 * np.log10(Pp_sol / Pp_in)
+    plt.plot(z_sol, pump_db, label=etiquette)
+
+plt.xlabel("Longueur z [m]")
+plt.ylabel(r"$10\log_{10}[P_p(z)/P_p(0)]$ [dB]")
+plt.title("Absorption de la pompe")
+plt.grid(True, alpha=0.3)
+plt.legend()
+plt.tight_layout()
+
+plt.show()
